@@ -5,7 +5,6 @@ import * as Device from 'expo-device';
 import { createClient } from '@supabase/supabase-js';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from "@react-native-community/netinfo";
-import { v4 as uuidv4 } from 'uuid';
 import md5 from 'md5';
 import { Card } from 'react-native-paper';
 
@@ -33,6 +32,7 @@ const LocationTracker = () => {
 
     const setupLocationTracking = async () => {
       try {
+        // Demande de permission de localisation
         let { status } = await Location.requestForegroundPermissionsAsync();
         if (status !== 'granted') {
           setErrorMsg('Permission to access location was denied');
@@ -42,9 +42,10 @@ const LocationTracker = () => {
         const deviceName = Device.deviceName || "Unknown Device";
         setDeviceName(deviceName);
 
+        // Récupération ou génération de l'identifiant de l'appareil
         let deviceId = await AsyncStorage.getItem('deviceId');
         if (!deviceId) {
-          deviceId = uuidv4();
+          deviceId = convertToUUIDv4(deviceName);
           await AsyncStorage.setItem('deviceId', deviceId);
         } else if (!isValidUUID(deviceId)) {
           deviceId = convertToUUIDv4(deviceId);
@@ -54,37 +55,38 @@ const LocationTracker = () => {
 
         const updateAndSendLocation = async () => {
           try {
+            // Récupération de la position actuelle
             const location = await Location.getCurrentPositionAsync({
               accuracy: Location.Accuracy.Balanced,
             });
-            console.log("New location received:", location);
+            console.log("Nouvelle localisation:", location);
             locationRef.current = location;
-            setLocationStatus("Location updated: " + new Date(location.timestamp).toLocaleTimeString());
+            setLocationStatus("Location mise à jour: " + new Date(location.timestamp).toLocaleTimeString());
             
             await storeLocationLocally(location, deviceIdRef.current, deviceName);
             await sendLocationToSupabase();
           } catch (error) {
-            console.error("Error updating location:", error);
-            setErrorMsg('Failed to update location: ' + error.message);
+            console.error("Erreur de mise à jour de la localisation:", error);
+            setErrorMsg('Échec de mise à jour de la localisation: ' + error.message);
           }
         };
 
-        // Initial update
+        // Mise à jour initiale
         await updateAndSendLocation();
 
-        // Set interval for hourly updates
+        // Intervalle pour les mises à jour horaires
         intervalId = setInterval(updateAndSendLocation, 3600000); 
 
-        // Set up network state listener
+        // Écouteur d'état réseau
         NetInfo.addEventListener(state => {
           if (state.isConnected) {
             sendLocationToSupabase();
           }
         });
 
-        console.log("Hourly location tracking started");
+        console.log("Suivi de localisation démarré");
       } catch (error) {
-        setErrorMsg('Failed to start location tracking: ' + error.message);
+        setErrorMsg('Échec du démarrage du suivi: ' + error.message);
       }
     };
 
@@ -98,7 +100,7 @@ const LocationTracker = () => {
   }, []);
 
   const isValidUUID = (uuid) => {
-    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
     return uuidRegex.test(uuid);
   };
 
@@ -120,9 +122,9 @@ const LocationTracker = () => {
       locations.push(locationData);
       await AsyncStorage.setItem('offlineLocations', JSON.stringify(locations));
       setOfflineCount(locations.length);
-      console.log("Location stored locally");
+      console.log("Localisation stockée localement");
     } catch (error) {
-      console.error('Error storing location locally:', error);
+      console.error('Erreur de stockage local:', error);
     }
   };
 
@@ -136,10 +138,10 @@ const LocationTracker = () => {
     const { error } = await supabase.from('locations').insert(locations);
 
     if (error) {
-      console.error('Error sending to Supabase:', error);
-      setErrorMsg('Failed to send locations to server. Will retry later.');
+      console.error('Erreur d\'envoi vers Supabase:', error);
+      setErrorMsg('Échec de l\'envoi des localisations. Réessayer plus tard.');
     } else {
-      console.log("All stored locations sent to Supabase successfully");
+      console.log("Toutes les localisations envoyées à Supabase");
       await AsyncStorage.removeItem('offlineLocations');
       setOfflineCount(0);
     }
@@ -149,17 +151,17 @@ const LocationTracker = () => {
     <View style={styles.container}>
       <Card style={styles.card}>
         <Card.Content>
-          <Text style={styles.title}>Location Tracker Status</Text>
+          <Text style={styles.title}>Statut du Suivi de Localisation</Text>
           <View style={styles.infoContainer}>
-            <Text style={styles.label}>Status:</Text>
+            <Text style={styles.label}>Statut:</Text>
             <Text style={styles.value}>{errorMsg ? errorMsg : locationStatus}</Text>
           </View>
           <View style={styles.infoContainer}>
-            <Text style={styles.label}>Device:</Text>
+            <Text style={styles.label}>Appareil:</Text>
             <Text style={styles.value}>{deviceName}</Text>
           </View>
           <View style={styles.infoContainer}>
-            <Text style={styles.label}>Offline Locations:</Text>
+            <Text style={styles.label}>Localisations hors-ligne:</Text>
             <Text style={styles.value}>{offlineCount}</Text>
           </View>
         </Card.Content>
